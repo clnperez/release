@@ -1069,6 +1069,14 @@ config_updater:
         - ci
         - ci-stg
       name: prow-job-cluster-launch-installer-nested-virt-tests
+    ci-operator/templates/openshift/installer/cluster-launch-installer-openstack-e2e-ppc64le.yaml:
+      clusters:
+        ci/api-build01-ci-devcluster-openshift-com:6443:
+        - ci
+        default:
+        - ci
+        - ci-stg
+      name: prow-job-cluster-launch-installer-openstack-e2e-ppc64le
     ci-operator/templates/openshift/installer/cluster-launch-installer-openstack-e2e.yaml:
       clusters:
         app.ci:

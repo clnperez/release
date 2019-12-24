@@ -6530,6 +6530,148 @@ periodics:
 - agent: kubernetes
   cluster: api.ci
   decorate: true
+  decoration_config:
+    skip_cloning: true
+  interval: 12h
+  labels:
+    ci.openshift.io/release-type: informing
+    job-env: openstack
+    job-release: "4.3"
+    pj-rehearse.openshift.io/can-be-rehearsed: "true"
+  name: release-openshift-ocp-installer-e2e-openstack-ppc64le-4.3
+  spec:
+    containers:
+    - args:
+      - --artifact-dir=$(ARTIFACTS)
+      - --give-pr-author-access-to-namespace=true
+      - --image-import-pull-secret=/etc/pull-secret/.dockerconfigjson
+      - --input-hash=$(BUILD_ID)
+      - --input-hash=$(JOB_NAME)
+      - --kubeconfig=/etc/apici/kubeconfig
+      - --lease-server-password-file=/etc/boskos/password
+      - --lease-server-username=ci
+      - --lease-server=https://boskos-ci.svc.ci.openshift.org
+      - --secret-dir=/usr/local/e2e-openstack-cluster-profile
+      - --secret-dir=/usr/local/pull-secret
+      - --target=e2e-openstack
+      - --template=/usr/local/e2e-openstack
+      command:
+      - ci-operator
+      env:
+      - name: RELEASE_IMAGE_LATEST
+        value: registry.svc.ci.openshift.org/ocp/release:4.3
+      - name: BRANCH
+        value: "4.3"
+      - name: CLUSTER_TYPE
+        value: openstack-ppc64le
+      - name: CONFIG_SPEC
+        value: |
+          tag_specification:
+            name: "$(BRANCH)"
+            namespace: ocp
+          resources:
+            '*':
+              limits:
+                memory: 4Gi
+              requests:
+                cpu: 100m
+                memory: 200Mi
+          tests:
+          - as: e2e-$(CLUSTER_TYPE)
+            commands: TEST_SUITE=openshift/conformance/parallel run-tests
+            openshift_installer:
+              cluster_profile: "$(CLUSTER_TYPE)"
+      - name: JOB_NAME_SAFE
+        value: e2e-openstack
+      - name: KURYR_ENABLED
+        value: "false"
+      - name: TEST_COMMAND
+        value: |
+          curl -o excluded_tests https://gist.githubusercontent.com/mkumatag/ee4fdfa468f43f3cabffac945ccb843c/raw/a1ab152762f84ffbfd2d43e1f0aac58d002a45f3/ocp43_power_blacklist.txt
+          cat > excluded_tests2 <<EOFILE
+          "[Area:Networking] multicast when using one of the plugins 'redhat/openshift-ovs-multitenant, redhat/openshift-ovs-networkpolicy' should allow multicast traffic in namespaces where it is enabled [Suite:openshift/conformance/parallel]"
+          "[Area:Networking] multicast when using one of the plugins 'redhat/openshift-ovs-multitenant, redhat/openshift-ovs-networkpolicy' should block multicast traffic in namespaces where it is disabled [Suite:openshift/conformance/parallel]"
+          "[cli] oc adm must-gather runs successfully [Suite:openshift/conformance/parallel]"
+          "[sig-apps] StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic] should adopt matching orphans and release non-matching pods [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "[sig-apps] StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic] should not deadlock when a pod's predecessor fails [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "[sig-apps] StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic] should perform rolling updates and roll backs of template modifications with PVCs [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "[sig-apps] StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic] should provide basic identity [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "[sig-network] Networking should provide Internet connection for containers [Feature:Networking-IPv4] [Suite:openshift/conformance/parallel] [Suite:k8s] [Skipped:azure]"
+          "[sig-storage] PVC Protection Verify "immediate" deletion of a PVC that is not in active use by a pod [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "[sig-storage] PVC Protection Verify that PVC in active use by a pod is not removed immediately [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "[sig-storage] PVC Protection Verify that scheduling of a pod that uses PVC that is being deleted fails and the pod becomes Unschedulable [Suite:openshift/conformance/parallel] [Suite:k8s]"
+          "node client cert requests armoring: deny pod's access to /config/master API endpoint [Suite:openshift/conformance/parallel]"
+          EOFILE
+          cat > invert_excluded.py <<EOSCRIPT; chmod +x invert_excluded.py
+          #!/usr/libexec/platform-python
+          import sys
+          all_tests = set()
+          excluded_tests = set()
+          for l in sys.stdin.readlines():
+            all_tests.add(l.strip())
+          with open(sys.argv[1], "r") as f:
+            for l in f.readlines():
+              excluded_tests.add(l.strip())
+          test_suite = all_tests - excluded_tests
+          for t in test_suite:
+            print(t)
+          EOSCRIPT
+          openshift-tests run openshift/conformance/parallel --dry-run | ./invert_excluded.py excluded_tests > test-suite.txt
+          ./invert_excluded.py excluded_tests2 < test-suite.txt > test-suite2.txt
+          TEST_SUITE="--file=test-suite2.txt" run-tests
+      image: ci-operator:latest
+      imagePullPolicy: Always
+      name: ""
+      resources:
+        requests:
+          cpu: 10m
+      volumeMounts:
+      - mountPath: /etc/apici
+        name: apici-ci-operator-credentials
+        readOnly: true
+      - mountPath: /etc/boskos
+        name: boskos
+        readOnly: true
+      - mountPath: /usr/local/e2e-openstack-cluster-profile
+        name: cluster-profile
+      - mountPath: /usr/local/e2e-openstack
+        name: job-definition
+        subPath: cluster-launch-installer-openstack-e2e-ppc64le.yaml
+      - mountPath: /etc/pull-secret
+        name: pull-secret
+        readOnly: true
+      - mountPath: /usr/local/pull-secret
+        name: release-pull-secret
+    serviceAccountName: ci-operator
+    volumes:
+    - name: apici-ci-operator-credentials
+      secret:
+        items:
+        - key: sa.ci-operator.apici.config
+          path: kubeconfig
+        secretName: apici-ci-operator-credentials
+    - name: boskos
+      secret:
+        items:
+        - key: password
+          path: password
+        secretName: boskos-credentials
+    - name: cluster-profile
+      projected:
+        sources:
+        - secret:
+            name: cluster-secrets-openstack-ppc64le
+    - configMap:
+        name: prow-job-cluster-launch-installer-openstack-e2e
+      name: job-definition
+    - name: pull-secret
+      secret:
+        secretName: regcred
+    - name: release-pull-secret
+      secret:
+        secretName: ci-pull-credentials
+- agent: kubernetes
+  decorate: true
   extra_refs:
   - base_ref: release-4.3
     org: openshift
